@@ -45,7 +45,7 @@
         "name": "Battery"
       },
       "last_fix": {
-        "name": "Last fix"
+        "name": "Last position"
       },
       "steps": {
         "name": "Steps"

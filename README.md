@@ -83,7 +83,7 @@ Extra attributes: `did`, `did_id`, `model`, `address`, `speed_kmh`, `direction_d
 | Entity | Unit | Description |
 |--------|------|-------------|
 | `sensor.<name>_battery` | % | Watch battery level |
-| `sensor.<name>_last_fix` | timestamp | Timestamp of the last GPS update |
+| `sensor.<name>_last_position` | timestamp | Timestamp of the last GPS update (`_last_fix` on installs from before the rename) |
 | `sensor.<name>_steps` | steps | Daily step count *(model-dependent)* |
 | `sensor.<name>_do_not_disturb_schedule` | — | Configured Do Not Disturb schedule *(compatible watches only, see below)* |
 | `sensor.<name>_safe_zones` | — | Number of safe zones; the list (name, coordinates, radius, enabled) is in the `zones` attribute |
