@@ -12,7 +12,7 @@ import voluptuous as vol
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import ATTR_DEVICE_ID, EVENT_HOMEASSISTANT_STOP
 from homeassistant.core import Event, SupportsResponse, callback
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
@@ -208,6 +208,7 @@ async def _async_setup_connect_entry(hass: HomeAssistant, entry: SaveFamilyConfi
     from homeassistant.helpers.aiohttp_client import async_create_clientsession
 
     from .connect.client import SaveFamilyConnectClient
+    from .connect.push import SaveFamilyConnectPush
     from .coordinator import SaveFamilyDataUpdateCoordinator
 
     @callback
@@ -242,6 +243,19 @@ async def _async_setup_connect_entry(hass: HomeAssistant, entry: SaveFamilyConfi
     )
     # No reload-on-update listener: every token rotation updates the entry data.
     await hass.config_entries.async_forward_entry_setups(entry, CONNECT_PLATFORMS)
+
+    @callback
+    def _async_push_update(did: str | None) -> None:
+        if isinstance(coordinator.last_exception, ConfigEntryAuthFailed):
+            # The session needs a new login: a poll would only retry the rejected token.
+            return
+        # New data or an alert (alerts name no watch): poll now instead of waiting for the interval.
+        if did is None or did in (coordinator.data or {}):
+            entry.async_create_task(hass, coordinator.async_request_refresh())
+
+    # Cancelled automatically when the entry unloads.
+    push = SaveFamilyConnectPush(client, _async_push_update)
+    entry.async_create_background_task(hass, push.async_run(), f"{DOMAIN} Connect push")
     return True
 
 

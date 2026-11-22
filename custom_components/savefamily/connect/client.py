@@ -50,6 +50,7 @@ from ..core.protocol import (
 _LOGGER = logging.getLogger(__name__)
 
 API_BASE = "https://api-platform.pro.savefamily.app/gateway/api"
+WEBSOCKET_URL = "wss://api-platform.pro.savefamily.app/websocket"
 PORTAL_ORIGIN = "https://portal.savefamily.app"
 ACCESS_COOKIE = "token"
 DEFAULT_2FA_METHOD = "EMAIL"
@@ -125,6 +126,9 @@ class SaveFamilyConnectClient:
         self._twofa_method = DEFAULT_2FA_METHOD
         self._lock = asyncio.Lock()
         self._refresh_task: asyncio.Task[None] | None = None
+        # Access token of the last websocket attempt, and the last one obtained because the websocket refused one.
+        self._ws_token: str | None = None
+        self._ws_forced_token: str | None = None
         # From the last device list, keyed by watch did (identificator).
         self._watches: dict[str, SaveFamilyWatch] = {}
         self._connected: dict[str, bool | None] = {}
@@ -185,6 +189,26 @@ class SaveFamilyConnectClient:
         self._store_tokens(data)
 
     # --- session ---------------------------------------------------------------
+
+    async def async_refresh_for_websocket(self) -> bool:
+        """Refresh the access token the websocket handshake refused; at most once per token.
+
+        Return False when the refused token was already one obtained this way: the websocket
+        refuses a fresh token too, so refreshing again would only rotate the session.
+        """
+        async with self._lock:
+            if self._ws_token is None or self._ws_token == self._ws_forced_token:
+                return False
+            await self._async_refresh_access_token()
+            self._ws_forced_token = self._access_token
+            return True
+
+    async def async_ws_connect(self, **kwargs: Any) -> aiohttp.ClientWebSocketResponse:
+        """Open the push websocket; like the portal, it authenticates with the `token` cookie."""
+        await self._async_ensure_access_token()
+        self._ws_token = self._access_token
+        headers = {"Origin": PORTAL_ORIGIN, "Cookie": f"{ACCESS_COOKIE}={self._access_token}"}
+        return await self._session.ws_connect(WEBSOCKET_URL, headers=headers, heartbeat=30, **kwargs)
 
     async def _async_ensure_access_token(self) -> None:
         async with self._lock:

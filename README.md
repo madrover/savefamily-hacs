@@ -230,7 +230,7 @@ The card shows the battery level, the time since the last GPS update, and the cu
 
 ## Data refresh
 
-The integration polls the API every **5 minutes** (position, battery, signal, alarms). Settings (work mode, SOS numbers, Do Not Disturb, safe zones, latest photo) are read every **30 minutes** and right after a change. The refresh button sends an asynchronous command to the watch, then triggers a new poll 20 seconds later. Connect watches are polled every **5 minutes** too; their SOS contacts and safe zones are read every **30 minutes**.
+The integration polls the API every **5 minutes** (position, battery, signal, alarms). Settings (work mode, SOS numbers, Do Not Disturb, safe zones, latest photo) are read every **30 minutes** and right after a change. The refresh button sends an asynchronous command to the watch, then triggers a new poll 20 seconds later. Connect watches are polled every **5 minutes** too, and right away when the SaveFamily server announces new data over its websocket; their SOS contacts and safe zones are read every **30 minutes**.
 
 ---
 
@@ -518,7 +518,7 @@ La carte affiche le niveau de batterie, le temps écoulé depuis la dernière po
 
 ## Mise à jour des données
 
-L'intégration interroge l'API toutes les **5 minutes** (position, batterie, signal, alarmes). Les réglages (mode de fonctionnement, numéros SOS, Ne pas déranger, zones de sécurité, dernière photo) sont relus toutes les **30 minutes** et juste après une modification. Le bouton "Rafraîchir la position" envoie une commande asynchrone à la montre, puis relance une interrogation 20 secondes plus tard. Les montres Connect sont aussi interrogées toutes les **5 minutes** ; leurs contacts SOS et zones de sécurité sont relus toutes les **30 minutes**.
+L'intégration interroge l'API toutes les **5 minutes** (position, batterie, signal, alarmes). Les réglages (mode de fonctionnement, numéros SOS, Ne pas déranger, zones de sécurité, dernière photo) sont relus toutes les **30 minutes** et juste après une modification. Le bouton "Rafraîchir la position" envoie une commande asynchrone à la montre, puis relance une interrogation 20 secondes plus tard. Les montres Connect sont aussi interrogées toutes les **5 minutes**, et immédiatement quand le serveur SaveFamily annonce de nouvelles données par son WebSocket ; leurs contacts SOS et zones de sécurité sont relus toutes les **30 minutes**.
 
 ---
 
