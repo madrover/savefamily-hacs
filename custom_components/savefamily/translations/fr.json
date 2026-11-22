@@ -87,6 +87,15 @@
       },
       "safe_zones": {
         "name": "Zones de sécurité"
+      },
+      "last_connection": {
+        "name": "Dernière connexion"
+      },
+      "reporting_interval": {
+        "name": "Intervalle d'envoi de la position"
+      },
+      "sound_mode": {
+        "name": "Mode sonore"
       }
     },
     "binary_sensor": {
@@ -95,6 +104,12 @@
       },
       "online": {
         "name": "En ligne"
+      },
+      "battery_low": {
+        "name": "Batterie faible"
+      },
+      "in_safe_zone": {
+        "name": "Dans une zone de sécurité"
       }
     },
     "button": {
@@ -145,6 +160,8 @@
               "home_school_departure": "Départ maison/école",
               "auth_code": "Code d'autorisation",
               "mode_change": "Changement de mode",
+              "disconnect": "Déconnectée",
+              "reconnect": "Reconnectée",
               "other": "Autre"
             }
           }

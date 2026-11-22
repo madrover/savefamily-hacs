@@ -186,6 +186,10 @@ class SaveFamilyApiClient:
         self._ensure_command_success(response)
         return response
 
+    def supports_command(self, did: str, command: str) -> bool:
+        """Classic watches accept every v2_sendOrder command the integration uses."""
+        return True
+
     async def async_find_alarms(self, did: str) -> list[SaveFamilyAlarm]:
         async def send(watch: SaveFamilyWatch) -> dict[str, Any]:
             return await self._request_json(

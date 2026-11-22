@@ -35,22 +35,31 @@ The account API key feature (`/users/{id}/api-key`) is reserved for admin roles;
 
 - `GET /devices/` returns `{total, items, page, pages}`; `?page=N` selects a page, and the integration reads them all. Each item has `id` (UUID, used in other paths), `identificator` (the number shown in the app), `imei`, `battery`, `carrierName` (the child's name), `type` (model, e.g. `savewatch-2`), `protocol`, `lastConnection` (epoch ms), plus `settings`, `capabilities` and `flags`.
 - `GET /devices/{id}/positions/latest` returns `{item}` with `latitude`, `longitude`, `hpe` (accuracy in metres), `steps`, `type` (`GPS`, `WIFI`, …), `positionDate` (epoch ms), `address`, and `networks` (nearby Wi-Fi SSIDs and BSSIDs).
-- `GET /devices/{id}/positions?limit=N` returns the position history, paginated (not used yet).
-- `wss://api-platform.pro.savefamily.app/websocket` pushes live updates (not used yet; the integration polls).
+- Device `flags`: `isDisconnect`, `isBatteryLow`, `isInOrOut` (`in`/`out` of a safe zone). Device `settings`: `frequency` (location reporting interval, seconds), `soundMode`, plus volume, language, fall detection and others. `capabilities.commands.types` lists the commands the watch accepts (47 on a SaveWatch 2).
+- `GET /devices/{id}/alerts` returns `{total, items, page, pages}`; each alert has `type` (`sos`, `lowBattery`, `geofenceIn`, `geofenceOut`, `disconnect`, `reconnect`), `createdAt` and `reportedAt` (epoch ms) and `deviceName`.
+- List endpoints take the portal's criteria as query parameters: `page`, `pageSize`, and `orderBy` / `filters` as base64-encoded JSON, e.g. `orderBy` = base64 of `[{"field": "createdAt", "sortDirection": "DESC"}]`. Without `orderBy`, lists come oldest first.
+- `GET /devices/{id}/contact-lists` returns the watch's contact lists (`emergency`, `secondary`, `app-contacts`); `GET /devices/{id}/geofences` returns its safe zones.
+- `POST /commands` with `{device: <identificator>, command: <name>, data: {}}` sends a command, e.g. `POSITION_REQUEST`, `FIND_DEVICE`, `RESTART`, `SHUTDOWN`.
+- `GET /devices/{id}/positions` returns the position history (not used yet).
+- The web portal also calls endpoints for Do Not Disturb, watch alarm clocks, contacts, safe zones, photos, heart rate, oxygen, call history and installed apps (not used yet).
 
 ## In the integration
 
-- `custom_components/savefamily/connect/client.py` implements the steps above and maps devices and positions to the same `SaveFamilyWatch` / `SaveFamilyWatchState` dataclasses as Classic, so the device tracker, battery, steps, last fix, stale-location and online entities work unchanged. The watch's device id is its `identificator`.
+- `custom_components/savefamily/connect/client.py` implements the steps above and maps devices, positions and alerts to the same `SaveFamilyWatch` / `SaveFamilyWatchState` / `SaveFamilyAlarm` dataclasses as Classic, so the device tracker, battery, steps, last fix, stale-location, online and alarm entities work unchanged. The watch's device id is its `identificator`.
+- Connect adds battery-low, in-safe-zone (disabled by default), last-connection, location-reporting-interval and sound-mode entities, and the online sensor follows the server's disconnect flag instead of the age of the last fix.
+- Alerts become `savefamily_alarm` events and fire the alarm event entity, newest 20 per poll; alerts already present at startup are not replayed. Alerts have no id: the integration derives one from `createdAt` and the type, so two alerts created in the same millisecond both fire. `disconnect` and `reconnect` are new event types; the alarm message stays empty because the alert only carries the child's name.
+- The refresh location, find watch, restart and power off buttons send `POSITION_REQUEST`, `FIND_DEVICE`, `RESTART` and `SHUTDOWN`. A button is available only while the watch lists the command in its capabilities, and while the server reports the watch disconnected a press shows the offline notification instead of sending.
+- The SOS numbers and safe zones sensors show counts only (emergency contacts and geofences), read every 30 minutes. Contact names and numbers, and zone places, are not kept.
 - The config entry stores the email, `backend: connect` and the current refresh token. **The password is not stored**; the setup form keeps it in memory only so that "Send me a new code" can request another code if the first one expires. The entry data is updated on every token rotation, so Connect entries do not reload when their data changes.
 - A 401/403 on the device list triggers one token refresh and, if it persists, a reauthentication. A 401/403 on one watch's position does not: that watch keeps its last known state and the others still update.
 - `networks`, `address` and `message` are dropped from positions before they reach Home Assistant, so nearby Wi-Fi networks never end up in entity attributes or the recorder. A latest position that is missing, has no coordinates or is at (0, 0) keeps the previous one, as on Classic.
-- Connect entries load only `device_tracker`, `sensor` and `binary_sensor`. Classic-only features (settings, Do Not Disturb, SOS numbers, work mode, remote commands, photo wall, alarms, position history action) are not available on Connect yet; their actions answer with a clear "not supported on SaveFamily Connect" error. An action whose target reaches Connect watches only through an area, floor or label skips them; naming a Connect watch, or reaching only Connect watches, gives that error.
+- Connect entries load `device_tracker`, `sensor`, `binary_sensor`, `event` and `button`. The Classic-only actions (Do Not Disturb, SOS numbers, call back, position history), the work mode selector, the take-photo button and the photo wall are not available on Connect yet; the actions answer with a clear "not supported on SaveFamily Connect" error. An action whose target reaches Connect watches only through an area, floor or label skips them; naming a Connect watch, or reaching only Connect watches, gives that error.
 
 ## Not done yet
 
-- Alarms and SOS events, geofences, SOS contacts and position history over the Connect API.
-- WebSocket push instead of polling.
-- Requesting a fresh position from the watch.
+- Writes: Do Not Disturb, watch alarm clocks, contacts, safe zones, reporting interval, sound mode.
+- Photos (take photo, latest photo), heart rate and oxygen, position history action.
+- The other watch commands, e.g. `SPY_CALL` (listen in) and `REQUEST_HEART_RATE`.
 
 ---
 
@@ -89,19 +98,28 @@ La fonction de clé d'API du compte (`/users/{id}/api-key`) est réservée aux r
 
 - `GET /devices/` renvoie `{total, items, page, pages}` ; `?page=N` choisit une page, et l'intégration les lit toutes. Chaque élément contient `id` (UUID, utilisé dans les autres chemins), `identificator` (le numéro affiché dans l'application), `imei`, `battery`, `carrierName` (le prénom de l'enfant), `type` (modèle, par ex. `savewatch-2`), `protocol`, `lastConnection` (epoch en ms), ainsi que `settings`, `capabilities` et `flags`.
 - `GET /devices/{id}/positions/latest` renvoie `{item}` avec `latitude`, `longitude`, `hpe` (précision en mètres), `steps`, `type` (`GPS`, `WIFI`, …), `positionDate` (epoch en ms), `address` et `networks` (SSID et BSSID des réseaux Wi-Fi proches).
-- `GET /devices/{id}/positions?limit=N` renvoie l'historique des positions, paginé (pas encore utilisé).
-- `wss://api-platform.pro.savefamily.app/websocket` pousse les mises à jour en direct (pas encore utilisé ; l'intégration interroge le serveur).
+- `flags` de l'appareil : `isDisconnect`, `isBatteryLow`, `isInOrOut` (`in`/`out` d'une zone de sécurité). `settings` de l'appareil : `frequency` (intervalle d'envoi de la position, en secondes), `soundMode`, ainsi que le volume, la langue, la détection de chute et d'autres. `capabilities.commands.types` liste les commandes acceptées par la montre (47 sur une SaveWatch 2).
+- `GET /devices/{id}/alerts` renvoie `{total, items, page, pages}` ; chaque alerte a un `type` (`sos`, `lowBattery`, `geofenceIn`, `geofenceOut`, `disconnect`, `reconnect`), `createdAt` et `reportedAt` (epoch en ms) et `deviceName`.
+- Les listes acceptent les critères du portail en paramètres de requête : `page`, `pageSize`, et `orderBy` / `filters` en JSON encodé en base64, par ex. `orderBy` = base64 de `[{"field": "createdAt", "sortDirection": "DESC"}]`. Sans `orderBy`, les listes commencent par le plus ancien.
+- `GET /devices/{id}/contact-lists` renvoie les listes de contacts de la montre (`emergency`, `secondary`, `app-contacts`) ; `GET /devices/{id}/geofences` renvoie ses zones de sécurité.
+- `POST /commands` avec `{device: <identificator>, command: <nom>, data: {}}` envoie une commande, par ex. `POSITION_REQUEST`, `FIND_DEVICE`, `RESTART`, `SHUTDOWN`.
+- `GET /devices/{id}/positions` renvoie l'historique des positions (pas encore utilisé).
+- Le portail web appelle aussi des points d'accès pour Ne pas déranger, les réveils de la montre, les contacts, les zones de sécurité, les photos, la fréquence cardiaque, l'oxygène, l'historique des appels et les applications installées (pas encore utilisés).
 
 ## Dans l'intégration
 
-- `custom_components/savefamily/connect/client.py` met en œuvre les étapes ci-dessus et convertit appareils et positions vers les mêmes dataclasses `SaveFamilyWatch` / `SaveFamilyWatchState` que Classic : le suivi de position, la batterie, les pas, la dernière position, la position périmée et l'état en ligne fonctionnent sans changement. L'identifiant de la montre est son `identificator`.
+- `custom_components/savefamily/connect/client.py` met en œuvre les étapes ci-dessus et convertit appareils, positions et alertes vers les mêmes dataclasses `SaveFamilyWatch` / `SaveFamilyWatchState` / `SaveFamilyAlarm` que Classic : le suivi de position, la batterie, les pas, la dernière position, la position périmée, l'état en ligne et l'entité d'alarme fonctionnent sans changement. L'identifiant de la montre est son `identificator`.
+- Connect ajoute les entités batterie faible, dans une zone de sécurité (désactivée par défaut), dernière connexion, intervalle d'envoi de la position et mode sonore, et le capteur en ligne suit l'indicateur de déconnexion du serveur au lieu de l'âge de la dernière position.
+- Les alertes deviennent des événements `savefamily_alarm` et déclenchent l'entité d'événement d'alarme, les 20 plus récentes à chaque interrogation ; les alertes déjà présentes au démarrage ne sont pas rejouées. Les alertes n'ont pas d'identifiant : l'intégration en dérive un de `createdAt` et du type, si bien que deux alertes créées à la même milliseconde se déclenchent toutes les deux. `disconnect` et `reconnect` sont de nouveaux types d'événement ; le message de l'alarme reste vide car l'alerte ne contient que le prénom de l'enfant.
+- Les boutons actualiser la position, trouver la montre, redémarrer et éteindre envoient `POSITION_REQUEST`, `FIND_DEVICE`, `RESTART` et `SHUTDOWN`. Un bouton n'est disponible que tant que la montre liste la commande dans ses capacités, et tant que le serveur indique la montre déconnectée, un appui affiche la notification hors ligne au lieu d'envoyer la commande.
+- Les capteurs numéros SOS et zones de sécurité n'affichent que des nombres (contacts d'urgence et zones), lus toutes les 30 minutes. Les noms et numéros des contacts, et les lieux des zones, ne sont pas conservés.
 - L'entrée de configuration conserve l'email, `backend: connect` et le jeton de rafraîchissement courant. **Le mot de passe n'est pas conservé** ; le formulaire de configuration le garde seulement en mémoire pour que « M'envoyer un nouveau code » puisse demander un autre code si le premier expire. Les données de l'entrée sont mises à jour à chaque rotation du jeton ; les entrées Connect ne se rechargent donc pas quand leurs données changent.
 - Une 401/403 sur la liste des appareils déclenche un rafraîchissement du jeton et, si elle persiste, une nouvelle authentification. Une 401/403 sur la position d'une montre, non : cette montre garde son dernier état connu et les autres continuent d'être mises à jour.
 - `networks`, `address` et `message` sont retirés des positions avant d'arriver dans Home Assistant : les réseaux Wi-Fi proches ne se retrouvent jamais dans les attributs des entités ni dans l'historique. Une dernière position absente, sans coordonnées ou en (0, 0) garde la précédente, comme sur Classic.
-- Les entrées Connect ne chargent que `device_tracker`, `sensor` et `binary_sensor`. Les fonctions propres à Classic (réglages, Ne pas déranger, numéros SOS, mode de fonctionnement, commandes à distance, mur de photos, alarmes, action d'historique des positions) ne sont pas encore disponibles sur Connect ; leurs actions répondent par une erreur claire « non pris en charge sur SaveFamily Connect ». Une action dont la cible n'atteint des montres Connect que par une pièce, un étage ou une étiquette les ignore ; nommer une montre Connect, ou n'atteindre que des montres Connect, donne cette erreur.
+- Les entrées Connect chargent `device_tracker`, `sensor`, `binary_sensor`, `event` et `button`. Les actions propres à Classic (Ne pas déranger, numéros SOS, rappel, historique des positions), le sélecteur de mode de fonctionnement, le bouton de prise de photo et le mur de photos ne sont pas encore disponibles sur Connect ; les actions répondent par une erreur claire « non pris en charge sur SaveFamily Connect ». Une action dont la cible n'atteint des montres Connect que par une pièce, un étage ou une étiquette les ignore ; nommer une montre Connect, ou n'atteindre que des montres Connect, donne cette erreur.
 
 ## Reste à faire
 
-- Alarmes et événements SOS, zones de sécurité, contacts SOS et historique des positions via l'API Connect.
-- Notifications WebSocket au lieu de l'interrogation périodique.
-- Demander une nouvelle position à la montre.
+- Écritures : Ne pas déranger, réveils de la montre, contacts, zones de sécurité, intervalle d'envoi, mode sonore.
+- Photos (prendre une photo, dernière photo), fréquence cardiaque et oxygène, action d'historique des positions.
+- Les autres commandes de la montre, par ex. `SPY_CALL` (écoute) et `REQUEST_HEART_RATE`.

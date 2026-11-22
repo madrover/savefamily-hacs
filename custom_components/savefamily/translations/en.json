@@ -87,6 +87,15 @@
       },
       "safe_zones": {
         "name": "Safe zones"
+      },
+      "last_connection": {
+        "name": "Last connection"
+      },
+      "reporting_interval": {
+        "name": "Location reporting interval"
+      },
+      "sound_mode": {
+        "name": "Sound mode"
       }
     },
     "binary_sensor": {
@@ -95,6 +104,12 @@
       },
       "online": {
         "name": "Online"
+      },
+      "battery_low": {
+        "name": "Battery low"
+      },
+      "in_safe_zone": {
+        "name": "In safe zone"
       }
     },
     "button": {
@@ -145,6 +160,8 @@
               "home_school_departure": "Left home/school",
               "auth_code": "Authorization code",
               "mode_change": "Mode change",
+              "disconnect": "Disconnected",
+              "reconnect": "Reconnected",
               "other": "Other"
             }
           }

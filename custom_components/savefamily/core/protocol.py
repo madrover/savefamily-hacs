@@ -58,6 +58,9 @@ ALARM_TYPES: dict[int, str] = {
     10: "mode_change",
 }
 ALARM_TYPE_OTHER = "other"
+# Alert types only SaveFamily Connect reports.
+ALARM_TYPE_DISCONNECT = "disconnect"
+ALARM_TYPE_RECONNECT = "reconnect"
 ALARM_FETCH_COUNT = 20
 
 # WorkModeActivity upload intervals, in seconds; Setting.DEFAULT_UPINTERVAL is 600.
@@ -196,6 +199,8 @@ class SaveFamilyWatch:
     config: str = ""
     is_esim: str = ""
     watch_type: str = ""
+    # Connect only: command names the watch advertises in its capabilities.
+    supported_commands: tuple[str, ...] = ()
 
     @property
     def name(self) -> str:
@@ -220,6 +225,15 @@ class SaveFamilyWatchState:
     last_poll_message: str = ""
     signal: int | None = None
     new_alarms: tuple[SaveFamilyAlarm, ...] = ()
+    # Reported by the server on Connect only; None on Classic.
+    connected: bool | None = None
+    battery_low: bool | None = None
+    in_safe_zone: bool | None = None
+    last_connection: datetime | None = None
+    reporting_interval: int | None = None
+    sound_mode: str | None = None
+    sos_contacts: int | None = None
+    safe_zones: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -256,6 +270,8 @@ class SaveFamilyClient(Protocol):
     async def async_send_command(
         self, did: str, command: str, *params: str, with_model: bool = False
     ) -> Any: ...
+
+    def supports_command(self, did: str, command: str) -> bool: ...
 
 
 @dataclass(frozen=True, slots=True)

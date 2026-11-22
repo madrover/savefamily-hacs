@@ -19,7 +19,7 @@ Find this integration useful? You can support its development:
 
 > **Technical note:** SaveFamily runs on the shared 3G Electronics backend (`myaqsh.com`), the same platform used by YQT Smart, SeTracker and CarePro+. This integration is inspired by the open-source project [yqt-smart-api](https://github.com/Niek/yqt-smart-api). How each feature was derived from the app, and how far it has been verified, is documented in [docs/REVERSE_ENGINEERING.md](docs/REVERSE_ENGINEERING.md).
 >
-> Watches managed by the newer **SaveFamily Connect** app use a separate SaveFamily platform. They are supported too, with location, battery and steps only for now: see [SaveFamily Connect](#savefamily-connect) and [docs/CONNECT.md](docs/CONNECT.md).
+> Watches managed by the newer **SaveFamily Connect** app use a separate SaveFamily platform. They are supported too, with location, battery, steps, alarms and the main buttons: see [SaveFamily Connect](#savefamily-connect) and [docs/CONNECT.md](docs/CONNECT.md).
 
 ---
 
@@ -79,7 +79,7 @@ Fill in the form:
 
 The password is not stored: Home Assistant keeps a session token that SaveFamily renews on every refresh. If Home Assistant stays off for more than 30 days, it asks you to log in again (password, then a new code).
 
-Connect watches get the device tracker, battery, last fix, steps, online and location stale entities. Alarms, settings, buttons, the photo wall and the actions below are Classic only for now. Details in [docs/CONNECT.md](docs/CONNECT.md).
+Connect watches get the device tracker, battery, last fix, steps, online and location stale entities, plus battery low, last connection, location reporting interval, sound mode, SOS numbers and safe zones (counts only), the alarm event (SOS, low battery, safe zone in/out, disconnect, reconnect) and the refresh location, find watch, restart and power off buttons. The work mode selector, take photo, the photo wall and the actions below are Classic only for now. Details in [docs/CONNECT.md](docs/CONNECT.md).
 
 You can add several accounts, for example one per parent. A watch listed by several of them gets a single set of entities, handled by one account at a time. Another account takes the watch over, with the same entities, when that account's entry is unloaded, or has failed or no longer listed the watch for 15 minutes.
 
@@ -230,7 +230,7 @@ The card shows the battery level, the time since the last GPS update, and the cu
 
 ## Data refresh
 
-The integration polls the API every **5 minutes** (position, battery, signal, alarms). Settings (work mode, SOS numbers, Do Not Disturb, safe zones, latest photo) are read every **30 minutes** and right after a change. The refresh button sends an asynchronous command to the watch, then triggers a new poll 20 seconds later. Connect watches are polled every **5 minutes** too (position and battery).
+The integration polls the API every **5 minutes** (position, battery, signal, alarms). Settings (work mode, SOS numbers, Do Not Disturb, safe zones, latest photo) are read every **30 minutes** and right after a change. The refresh button sends an asynchronous command to the watch, then triggers a new poll 20 seconds later. Connect watches are polled every **5 minutes** too; their SOS contacts and safe zones are read every **30 minutes**.
 
 ---
 
@@ -307,7 +307,7 @@ Cette intégration vous est utile ? Vous pouvez soutenir son développement :
 
 > **Note technique** : SaveFamily utilise la plateforme backend partagée de 3G Electronics (`myaqsh.com`), identique à YQT Smart, SeTracker et CarePro+. Cette intégration est adaptée du projet open-source [yqt-smart-api](https://github.com/Niek/yqt-smart-api). L'origine de chaque fonction dans l'application, et son niveau de vérification, sont décrits dans [docs/REVERSE_ENGINEERING.md](docs/REVERSE_ENGINEERING.md#analyse-de-lapplication-savefamily-v060).
 >
-> Les montres gérées par la nouvelle application **SaveFamily Connect** utilisent une plateforme SaveFamily distincte. Elles sont aussi prises en charge, pour l'instant avec la position, la batterie et les pas uniquement : voir [SaveFamily Connect](#savefamily-connect-1) et [docs/CONNECT.md](docs/CONNECT.md#backend-savefamily-connect).
+> Les montres gérées par la nouvelle application **SaveFamily Connect** utilisent une plateforme SaveFamily distincte. Elles sont aussi prises en charge, avec la position, la batterie, les pas, les alarmes et les principaux boutons : voir [SaveFamily Connect](#savefamily-connect-1) et [docs/CONNECT.md](docs/CONNECT.md#backend-savefamily-connect).
 
 ---
 
@@ -367,7 +367,7 @@ Remplir le formulaire :
 
 Le mot de passe n'est pas conservé : Home Assistant garde un jeton de session que SaveFamily renouvelle à chaque rafraîchissement. Si Home Assistant reste éteint plus de 30 jours, il vous demande de vous reconnecter (mot de passe, puis un nouveau code).
 
-Les montres Connect disposent du suivi de position, de la batterie, de la dernière position, des pas, de l'état en ligne et de la position périmée. Les alarmes, réglages, boutons, le mur de photos et les actions ci-dessous sont pour l'instant réservés à Classic. Détails dans [docs/CONNECT.md](docs/CONNECT.md#backend-savefamily-connect).
+Les montres Connect disposent du suivi de position, de la batterie, de la dernière position, des pas, de l'état en ligne et de la position périmée, ainsi que de la batterie faible, de la dernière connexion, de l'intervalle d'envoi de la position, du mode sonore, des numéros SOS et zones de sécurité (nombres seulement), de l'événement d'alarme (SOS, batterie faible, entrée/sortie de zone, déconnexion, reconnexion) et des boutons actualiser la position, trouver la montre, redémarrer et éteindre. Le sélecteur de mode, la prise de photo, le mur de photos et les actions ci-dessous sont pour l'instant réservés à Classic. Détails dans [docs/CONNECT.md](docs/CONNECT.md#backend-savefamily-connect).
 
 Vous pouvez ajouter plusieurs comptes, par exemple un par parent. Une montre listée par plusieurs d'entre eux n'a qu'un seul jeu d'entités, géré par un compte à la fois. Un autre compte reprend la montre, avec les mêmes entités, quand l'entrée de ce compte est déchargée, ou est en échec ou ne liste plus la montre depuis 15 minutes.
 
@@ -518,7 +518,7 @@ La carte affiche le niveau de batterie, le temps écoulé depuis la dernière po
 
 ## Mise à jour des données
 
-L'intégration interroge l'API toutes les **5 minutes** (position, batterie, signal, alarmes). Les réglages (mode de fonctionnement, numéros SOS, Ne pas déranger, zones de sécurité, dernière photo) sont relus toutes les **30 minutes** et juste après une modification. Le bouton "Rafraîchir la position" envoie une commande asynchrone à la montre, puis relance une interrogation 20 secondes plus tard. Les montres Connect sont aussi interrogées toutes les **5 minutes** (position et batterie).
+L'intégration interroge l'API toutes les **5 minutes** (position, batterie, signal, alarmes). Les réglages (mode de fonctionnement, numéros SOS, Ne pas déranger, zones de sécurité, dernière photo) sont relus toutes les **30 minutes** et juste après une modification. Le bouton "Rafraîchir la position" envoie une commande asynchrone à la montre, puis relance une interrogation 20 secondes plus tard. Les montres Connect sont aussi interrogées toutes les **5 minutes** ; leurs contacts SOS et zones de sécurité sont relus toutes les **30 minutes**.
 
 ---
 

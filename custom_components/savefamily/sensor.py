@@ -1,15 +1,22 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
-from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorStateClass
-from homeassistant.const import PERCENTAGE, EntityCategory
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorEntity,
+    SensorEntityDescription,
+    SensorStateClass,
+)
+from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfTime
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import SaveFamilyConfigEntry
-from .const import BACKEND_CLASSIC, CONF_BACKEND
-from .core.protocol import supports_dnd_schedule
+from .const import BACKEND_CLASSIC, BACKEND_CONNECT, CONF_BACKEND
+from .core.protocol import SaveFamilyWatchState, supports_dnd_schedule
 from .entity import SaveFamilyEntity, SaveFamilySettingsEntity, async_forget_removed_watches
 
 
@@ -20,8 +27,7 @@ async def async_setup_entry(
 ) -> None:
     coordinator = entry.runtime_data.coordinator
     settings_coordinator = entry.runtime_data.settings_coordinator
-    # Connect does not report GSM signal (yet).
-    has_signal = entry.data.get(CONF_BACKEND, BACKEND_CLASSIC) == BACKEND_CLASSIC
+    backend = entry.data.get(CONF_BACKEND, BACKEND_CLASSIC)
     entities_by_did: dict[str, list[SensorEntity]] = {}
     async_forget_removed_watches(hass, entry, entities_by_did)
 
@@ -36,8 +42,12 @@ async def async_setup_entry(
                     SaveFamilyLastFixSensor(coordinator, did),
                     SaveFamilyStepsSensor(coordinator, did),
                 ]
-                if has_signal:
+                if backend == BACKEND_CLASSIC:
+                    # Connect does not report GSM signal (yet).
                     es.append(SaveFamilySignalSensor(coordinator, did))
+                if backend == BACKEND_CONNECT:
+                    # Fields only Connect reports; unknown until the server sends them.
+                    es.extend(SaveFamilyStateSensor(coordinator, did, description) for description in STATE_SENSORS)
                 # Settings exist only on Classic, which has a settings coordinator.
                 if settings_coordinator is not None:
                     es += [
@@ -53,6 +63,68 @@ async def async_setup_entry(
 
     entry.async_on_unload(coordinator.async_add_listener(_async_handle_update))
     _async_handle_update()
+
+
+@dataclass(frozen=True, kw_only=True)
+class SaveFamilyStateSensorDescription(SensorEntityDescription):
+    value_fn: Callable[[SaveFamilyWatchState], Any]
+
+
+STATE_SENSORS = (
+    SaveFamilyStateSensorDescription(
+        key="last_connection",
+        translation_key="last_connection",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda state: state.last_connection,
+    ),
+    SaveFamilyStateSensorDescription(
+        key="reporting_interval",
+        translation_key="reporting_interval",
+        icon="mdi:map-clock",
+        device_class=SensorDeviceClass.DURATION,
+        native_unit_of_measurement=UnitOfTime.SECONDS,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda state: state.reporting_interval,
+    ),
+    SaveFamilyStateSensorDescription(
+        key="sound_mode",
+        translation_key="sound_mode",
+        icon="mdi:volume-vibrate",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda state: state.sound_mode,
+    ),
+    # Same names as the Classic settings sensors; on Connect only the counts are kept.
+    SaveFamilyStateSensorDescription(
+        key="sos_numbers",
+        translation_key="sos_numbers",
+        icon="mdi:phone-alert",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda state: state.sos_contacts,
+    ),
+    SaveFamilyStateSensorDescription(
+        key="safe_zones",
+        translation_key="safe_zones",
+        icon="mdi:map-marker-radius",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda state: state.safe_zones,
+    ),
+)
+
+
+class SaveFamilyStateSensor(SaveFamilyEntity, SensorEntity):
+    """A value read straight from the watch state."""
+
+    entity_description: SaveFamilyStateSensorDescription
+
+    def __init__(self, coordinator, did: str, description: SaveFamilyStateSensorDescription) -> None:
+        super().__init__(coordinator, did)
+        self.entity_description = description
+        self._attr_unique_id = f"{did}_{description.key}"
+
+    @property
+    def native_value(self) -> Any:
+        return self.entity_description.value_fn(self.snapshot)
 
 
 class SaveFamilyBatterySensor(SaveFamilyEntity, SensorEntity):

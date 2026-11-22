@@ -73,11 +73,13 @@ PLATFORMS = (
     "event",
     "image",
 )
-# Connect has no Classic settings, commands or photo wall (yet).
+# Connect has no Classic settings, work mode or photo wall (yet).
 CONNECT_PLATFORMS = (
     "device_tracker",
     "sensor",
     "binary_sensor",
+    "event",
+    "button",
 )
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)

@@ -71,6 +71,9 @@ class FakeSaveFamilyClient:
             states[did] = SaveFamilyWatchState(watch=watch, latitude=48.85, longitude=2.35, battery=80)
         return states
 
+    def supports_command(self, did: str, command: str) -> bool:
+        return True
+
     async def async_find_alarms(self, did: str) -> list[SaveFamilyAlarm]:
         if did in self._api.alarm_errors:
             raise self._api.alarm_errors[did]

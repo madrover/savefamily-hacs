@@ -5,7 +5,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import SaveFamilyConfigEntry
-from .core.protocol import ALARM_TYPE_OTHER, ALARM_TYPES
+from .core.protocol import ALARM_TYPE_DISCONNECT, ALARM_TYPE_OTHER, ALARM_TYPE_RECONNECT, ALARM_TYPES
 from .entity import SaveFamilyEntity, async_forget_removed_watches
 
 
@@ -38,7 +38,7 @@ class SaveFamilyAlarmEvent(SaveFamilyEntity, EventEntity):
 
     _attr_translation_key = "alarm"
     _attr_icon = "mdi:alarm-light"
-    _attr_event_types = [*ALARM_TYPES.values(), ALARM_TYPE_OTHER]
+    _attr_event_types = [*ALARM_TYPES.values(), ALARM_TYPE_DISCONNECT, ALARM_TYPE_RECONNECT, ALARM_TYPE_OTHER]
 
     def __init__(self, coordinator, did: str) -> None:
         super().__init__(coordinator, did)

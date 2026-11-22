@@ -10,10 +10,12 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import SaveFamilyConfigEntry
-from .const import TAKE_PHOTO_REFRESH_DELAY
+from .connect.client import COMMANDS as CONNECT_COMMANDS
+from .const import BACKEND_CONNECT, CONF_BACKEND, TAKE_PHOTO_REFRESH_DELAY
 from .core.protocol import (
     COMMAND_FIND_WATCH,
     COMMAND_POWER_OFF,
+    COMMAND_REQUEST_LOCATION,
     COMMAND_RESTART,
     COMMAND_TAKE_PHOTO,
     SaveFamilyError,
@@ -72,6 +74,12 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     coordinator = entry.runtime_data.coordinator
+    # Connect has no photo command; its watches list the commands they accept (see available).
+    descriptions = [
+        description
+        for description in COMMAND_BUTTONS
+        if entry.data.get(CONF_BACKEND) != BACKEND_CONNECT or description.command in CONNECT_COMMANDS
+    ]
     entities_by_did: dict[str, list[ButtonEntity]] = {}
     async_forget_removed_watches(hass, entry, entities_by_did)
 
@@ -81,7 +89,7 @@ async def async_setup_entry(
         for did in coordinator.data:
             if did not in entities_by_did:
                 es: list[ButtonEntity] = [SaveFamilyRequestLocationButton(coordinator, did)]
-                es.extend(SaveFamilyCommandButton(coordinator, did, entry, description) for description in COMMAND_BUTTONS)
+                es.extend(SaveFamilyCommandButton(coordinator, did, entry, description) for description in descriptions)
                 entities_by_did[did] = es
                 new_entities.extend(es)
         if new_entities:
@@ -98,6 +106,11 @@ class SaveFamilyRequestLocationButton(SaveFamilyEntity, ButtonEntity):
     def __init__(self, coordinator, did: str) -> None:
         super().__init__(coordinator, did)
         self._attr_unique_id = f"{did}_request_location"
+
+    @property
+    def available(self) -> bool:
+        # A Connect watch may not accept commands, or not yet; Classic watches accept them all.
+        return super().available and self.coordinator.client.supports_command(self._did, COMMAND_REQUEST_LOCATION)
 
     async def async_press(self) -> None:
         try:
@@ -122,6 +135,10 @@ class SaveFamilyCommandButton(SaveFamilyEntity, ButtonEntity):
         self.entity_description = description
         self._entry = entry
         self._attr_unique_id = f"{did}_{description.key}"
+
+    @property
+    def available(self) -> bool:
+        return super().available and self.coordinator.client.supports_command(self._did, self.entity_description.command)
 
     async def async_press(self) -> None:
         description = self.entity_description

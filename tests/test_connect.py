@@ -10,19 +10,20 @@ from homeassistant.config_entries import SOURCE_REAUTH, ConfigEntryState
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import MockConfigEntry, async_capture_events
 from pytest_homeassistant_custom_component.test_util.aiohttp import (
     AiohttpClientMocker,
     AiohttpClientMockResponse,
 )
 
-from custom_components.savefamily.connect.client import API_BASE, SaveFamilyConnectClient
+from custom_components.savefamily.connect.client import API_BASE, LISTS_REFRESH_INTERVAL, SaveFamilyConnectClient
 from custom_components.savefamily.const import (
     BACKEND_CONNECT,
     CONF_BACKEND,
     CONF_LOGINNAME,
     CONF_REFRESH_TOKEN,
     DOMAIN,
+    EVENT_ALARM,
 )
 
 DID = "860000000000001"
@@ -30,11 +31,18 @@ DEVICE_ID = "device-1"
 POSITION = {"latitude": 48.85, "longitude": 2.35, "hpe": 20, "steps": 1200, "positionDate": 1_700_000_000_000}
 
 
+def alert(alert_type: str, created_ms: int) -> dict[str, Any]:
+    return {"type": alert_type, "createdAt": created_ms, "reportedAt": created_ms}
+
+
 def mock_gateway(
     aioclient_mock: AiohttpClientMocker,
     *,
     position: Any = POSITION,
     refresh_status: int = 200,
+    alerts: Any = None,
+    commands: list[str] | None = None,
+    contact_lists: Any = None,
 ) -> None:
     """A Connect account with one watch, as the gateway answers it."""
     aioclient_mock.clear_requests()
@@ -47,12 +55,32 @@ def mock_gateway(
         aioclient_mock.post(f"{API_BASE}/auth/refresh", status=refresh_status, text='{"error": {}}')
     aioclient_mock.get(
         f"{API_BASE}/devices/",
-        json={"items": [{"id": DEVICE_ID, "identificator": DID, "battery": 76, "type": "watch"}], "pages": 1},
+        json={
+            "items": [
+                {
+                    "id": DEVICE_ID,
+                    "identificator": DID,
+                    "battery": 76,
+                    "type": "watch",
+                    "capabilities": {"commands": {"enabled": True, "types": commands or []}},
+                }
+            ],
+            "pages": 1,
+        },
     )
     aioclient_mock.get(
         f"{API_BASE}/devices/{DEVICE_ID}/positions/latest",
         json={} if position is None else {"item": position},
     )
+    if isinstance(alerts, str):
+        aioclient_mock.get(f"{API_BASE}/devices/{DEVICE_ID}/alerts", text=alerts)
+    else:
+        answer = alerts if isinstance(alerts, dict) else {"items": alerts or []}
+        aioclient_mock.get(f"{API_BASE}/devices/{DEVICE_ID}/alerts", json=answer)
+    if contact_lists is None:
+        contact_lists = {"items": [{"type": "emergency", "contacts": [{}, {}]}]}
+    aioclient_mock.get(f"{API_BASE}/devices/{DEVICE_ID}/contact-lists", json=contact_lists)
+    aioclient_mock.get(f"{API_BASE}/devices/{DEVICE_ID}/geofences", json={"items": [{}], "total": 1})
 
 
 def make_connect_entry() -> MockConfigEntry:
@@ -185,3 +213,77 @@ async def test_rotated_token_is_stored_when_the_caller_is_cancelled(
     assert poll.cancelled()
     assert stored == ["rotated"]
     assert client.refresh_token == "rotated"
+
+
+async def _poll(hass: HomeAssistant, entry: MockConfigEntry) -> None:
+    await entry.runtime_data.coordinator.async_refresh()
+    await hass.async_block_till_done()
+
+
+async def test_alerts_created_in_the_same_millisecond_all_fire(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    mock_gateway(aioclient_mock, alerts=[alert("lowBattery", 1_000)])
+    entry = await _setup(hass)
+    events = async_capture_events(hass, EVENT_ALARM)
+
+    # The zone exit is seen first; the SOS of the same millisecond is listed only at the next poll.
+    mock_gateway(aioclient_mock, alerts=[alert("geofenceOut", 2_000), alert("lowBattery", 1_000)])
+    await _poll(hass, entry)
+    mock_gateway(
+        aioclient_mock, alerts=[alert("sos", 2_000), alert("geofenceOut", 2_000), alert("lowBattery", 1_000)]
+    )
+    await _poll(hass, entry)
+
+    assert [event.data["type"] for event in events] == ["geofence_exit", "sos"]
+    assert _state(hass, "event", "alarm").attributes["event_type"] == "sos"
+
+
+@pytest.mark.parametrize("answer", ["<html>Maintenance</html>", {"error": "busy"}], ids=["not JSON", "no items"])
+async def test_unexpected_alerts_answer_does_not_replay_old_alerts(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker, answer: Any
+) -> None:
+    old = [alert("sos", 1_000), alert("geofenceOut", 2_000)]
+    # The first poll after a restart gets a maintenance page or an envelope without items.
+    mock_gateway(aioclient_mock, alerts=answer)
+    entry = await _setup(hass)
+    events = async_capture_events(hass, EVENT_ALARM)
+
+    mock_gateway(aioclient_mock, alerts=old)
+    await _poll(hass, entry)
+    mock_gateway(aioclient_mock, alerts=[*old, alert("lowBattery", 3_000)])
+    await _poll(hass, entry)
+
+    assert [event.data["type"] for event in events] == ["low_battery"]
+
+
+async def test_unexpected_contacts_answer_keeps_the_counts(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    mock_gateway(aioclient_mock)
+    entry = await _setup(hass)
+    client = entry.runtime_data.client
+    # The counts are due to be read again.
+    client._lists = {did: (read_at - LISTS_REFRESH_INTERVAL, *counts) for did, (read_at, *counts) in client._lists.items()}
+
+    mock_gateway(aioclient_mock, contact_lists={"error": "busy"})
+    await _poll(hass, entry)
+
+    assert entry.runtime_data.coordinator.data[DID].sos_contacts == 2
+    assert entry.runtime_data.coordinator.data[DID].safe_zones == 1
+
+
+async def test_buttons_follow_the_commands_the_watch_accepts(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    mock_gateway(aioclient_mock, commands=[])
+    entry = await _setup(hass)
+
+    assert _state(hass, "button", "request_location").state == "unavailable"
+    assert _state(hass, "button", "take_photo") is None
+
+    mock_gateway(aioclient_mock, commands=["POSITION_REQUEST"])
+    await _poll(hass, entry)
+
+    assert _state(hass, "button", "request_location").state != "unavailable"
+    assert _state(hass, "button", "find_watch").state == "unavailable"
